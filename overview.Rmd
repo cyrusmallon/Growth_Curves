@@ -1,0 +1,283 @@
+---
+title: "Growth Experiments Overview"
+author: "C.A. Mallon"
+date: "13-4-2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+header-includes: \usepackage{pdflscape}
+---
+\begin{landscape}
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(dplyr)
+library(broom)
+library(here)
+```
+
+**Examine Data**
+
+Let's first examine the data from the 'Nutrient Source Combination' experiment. The purpose of this experiment was to see how the growth rate of each species changed when grown on all possible combinations of the main four nutrient sources (FRUctose, GLUcose, SUCrose, and LACtose), as well as the media without the sugars and thus only Amino Acids.
+
+Below are all the growth curves.
+```{r,echo = FALSE, warning=FALSE, message=FALSE, results = 'hide', fig.align='center',fig.width = 30/2.54, fig.height = 19/2.54}
+#inspect curves
+data <- read.delim2(here("Data/21March2021.txt"),header=FALSE,sep=",")
+
+#remove metadata from spectrophotometer
+data <- data[-c(1:4),-c(435:436)]
+
+#make first row colnames
+colnames(data) <- as.character(unlist(data[1,]))
+data <- data[-1,]
+
+#name first colum
+names(data)[1] <- "well"
+
+
+#make columns to identify species and and nutrient mixture
+data$species <- NA
+data$nutrient_mix <- NA
+data$replicate <- NA
+
+data$species[grepl("01|02|03|04",data$well)] <- "Ptund"
+data$species[grepl("05|06|07|08",data$well)] <- "Ecl"
+data$species[grepl("09|10|11|12",data$well)] <- "Mfol"
+data$species[grepl("13|14|15|16",data$well)] <- "Smalt"
+data$species[grepl("17|19|21|23",data$well)] <- "Cntl"
+
+
+data$nutrient_mix[grepl("A",data$well)] <- "F+G+S+L"
+data$nutrient_mix[grepl("B",data$well)] <- "F+G+S"
+data$nutrient_mix[grepl("C",data$well)] <- "F+G+L"
+data$nutrient_mix[grepl("D",data$well)] <- "F+S+L"
+data$nutrient_mix[grepl("E",data$well)] <- "G+S+L"
+data$nutrient_mix[grepl("F",data$well)] <- "F+G"
+data$nutrient_mix[grepl("G",data$well)] <- "F+S"
+data$nutrient_mix[grepl("H",data$well)] <- "F+L"
+data$nutrient_mix[grepl("I",data$well)] <- "G+S"
+data$nutrient_mix[grepl("J",data$well)] <- "G+L"
+data$nutrient_mix[grepl("K",data$well)] <- "S+L"
+data$nutrient_mix[grepl("L",data$well)] <- "F"
+data$nutrient_mix[grepl("M",data$well)] <- "G"
+data$nutrient_mix[grepl("N",data$well)] <- "S"
+data$nutrient_mix[grepl("O",data$well)] <- "L"
+data$nutrient_mix[grepl("P",data$well)] <- "AA"
+
+
+data$replicate[grepl("01|05|09|13|17",data$well)] <- "r1"
+data$replicate[grepl("02|06|10|14|19",data$well)] <- "r2"
+data$replicate[grepl("03|07|11|15|21",data$well)] <- "r3"
+data$replicate[grepl("04|08|12|16|23",data$well)] <- "r4"
+
+
+
+
+#get rid of now usless columns
+data <- data[,-c(1:2)]
+
+#view data
+data[1:10,c(1:4,430:435)]
+
+
+#wide to long
+#then plot data
+#remember, cannot directly covert factor to numeric
+data %>% 
+  pivot_longer(-c(433:435),names_to="time_sec",values_to="OD600") %>%
+  mutate(OD600=as.numeric(as.character(OD600)),time_sec=as.numeric(time_sec),time_hrs=time_sec*(1/60)*(1/60)) %>%
+  mutate(nutrient_mix = fct_relevel(nutrient_mix,
+                                    levels=c("F+G+S+L",
+                                             "F+G+S","F+G+L","F+S+L","G+S+L",
+                                             "F+G","F+S","F+L","G+S","G+L","S+L","F","G","S","L","AA"))) %>%
+  ggplot(.,aes(x=time_hrs,y=OD600,color=species,group=replicate)) +
+  geom_line(size = 0.5) +
+  facet_grid(rows=vars(species),cols=vars(nutrient_mix)) +
+  ylab(expression(OD["600nm"]))+
+  xlab("Time (hrs)")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) 
+````
+
+**Cut Data**
+
+In order to calculate the growth rate, I first went through each group of curves--meaning each species on each nutrient mix--and cut the beginning and end of the curve. The goal was to capture growth in the exponential phase. 
+
+We can now examine the cut data on a log scale to make sure we have a linear relationship with time, which is shown below. Growth on only the amino acids is shown seperately.
+
+At least visually, everything looks quite linear.
+```{r,echo = FALSE,warning=FALSE,message=FALSE}
+#load data
+load(here("Data/data_cut_13April2021.RData"))
+data_ansc <- data_cut
+
+#prep data
+y <- do.call(c,data_ansc)
+#bind the list to one tibble
+z <- do.call(rbind,y)
+#name data
+data_ansc <- z
+```
+
+```{r,echo = FALSE,warning=FALSE,message=FALSE, fig.align='center',fig.width = 30/2.54, fig.height = 19/2.54} 
+#examine the data (which is already cut)
+data_ansc %>%
+  filter(species != "Cntl" & time_hrs < 40 & nutrient_mix != "AA") %>%
+  ggplot(.) +
+  geom_point(aes(x = time_hrs, y = log(OD600), group = replicate, color = replicate))+
+  geom_line(aes(x = time_hrs, y = log(OD600), group = replicate, color = replicate))+
+  facet_grid(cols = vars(nutrient_mix), rows = vars(species))
+```
+
+```{r, echo = FALSE,warning=FALSE,message=FALSE}
+#Examine AA growth seperately
+data_ansc %>%
+  filter(species != "Cntl" & nutrient_mix == "AA") %>%
+  ggplot(.) +
+  geom_point(aes(x = time_hrs, y = log(OD600), group = replicate, color = replicate))+
+  geom_line(aes(x = time_hrs, y = log(OD600), group = replicate, color = replicate))+
+  facet_grid(cols = vars(nutrient_mix), rows = vars(species))
+```
+
+**Calculate Growth Rate**
+
+For each nutrient source and species, calculate the growth rate. Notice in the code that all I'm doing is fitting a linear model to the data show above, and using the slope as the estimate for growth rate. 
+
+Let's first examine if any data was not significant and thus not linear. The table below show us that only two curves from P. tundrae growing on the amino acids are not linear relationships.
+```{r, fig.align='center',fig.width = 30/2.54, fig.height = 19/2.54}
+#calc growth rate
+res <- data_ansc %>% 
+  filter(species != "Cntl") %>%
+  group_by(species,nutrient_mix,replicate) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~lm(log(OD600) ~ time_hrs, data = .x)),
+    tidied = map(fit,tidy)
+  ) %>%
+  unnest(tidied) 
+
+#Is there any data that is not linear?
+res %>%
+  filter(term != "(Intercept)" & p.value > 0.05)
+```
+
+
+Next, The plot below shows the growth rate for each species on each nutrient mix. Each point on a plot is one replicate curve. The dashed red line is at 0.25, which is the dilution rate at which the chemostat was set. 
+
+Interestingly, surprisingly,  the only species that can grow faster than the set dilution rate is E. coli.
+
+How is it then even possible that the other species were able to survive!? Perhaps a strong bottle neck in the beginning days of the experiment.
+
+Is growth rate calculation OK?
+
+
+```{r,echo = FALSE,warning=FALSE,message=FALSE, fig.align='center',fig.width = 30/2.54, fig.height = 19/2.54}
+#visualize
+res %>%
+  filter(term != "(Intercept)") %>%
+  ggplot(., aes(x = term, y = estimate, group = replicate, color = replicate))+
+  geom_point(size = 2)+
+  geom_hline(yintercept=0.25, linetype="dashed", color = "red")+
+  ylab("growth rate (generations/hour)")+
+  facet_grid(rows=vars(species), cols = vars(nutrient_mix))
+
+
+```
+
+**Growth Rate of Evolved E. coli**
+
+Below are the results of all of the evolved forms of E. coli, which I've isolated and grown on the mixture, as well as all of the four carbon sources seperately.
+
+They are displayed by the level of species richnness from which they were isolated; they are also displayed next to the ancestral growth rates.
+
+Data was cut and growth rate was calculated in the same way as described above.
+
+In short, the complete data set shows results completely opposite to what Femke showed: Growth rates of evolved strains are higher when coming from the monoculture than when coming from more diverse communities!
+
+This could be due to the fact that the program previously used to calculate growth rate is libable to errors.
+
+```{r, echo = FALSE,warning=FALSE,message=FALSE}
+load(here("Data/data_evolved_strains.RData"))
+data_evld <- data_cut
+
+#flatten the list
+y <- do.call(c,data_evld)
+#bind the list to one tibble
+z <- do.call(rbind,y)
+#save to new name
+data_evld <- z
+
+#vector for filtering carbon source combinations needed
+carbon_srcs <- c("F+G+S+L", "F", "G", "S", "L")
+
+#prep data to be joined to evolved data
+data_ansc_new <- data_ansc %>%
+  filter(species == "Ecl" & nutrient_mix %in% carbon_srcs) %>%
+  mutate(carbon_source = str_replace_all(
+    nutrient_mix,
+    c(
+      "^F\\+G\\+\\S\\+L$" = "4 C-src",
+      "^F$" = "FRU",
+      "^G$" = "GLU",
+      "^L$" = "LAC",
+      "^S$" = "SUC"
+    )
+  )) %>%
+  rename(tech_replicate = replicate) %>%
+  mutate(tech_replicate = str_replace(tech_replicate, "r", "R")) %>%
+  mutate(
+    species = "B",
+    species_richness = "Ansc",
+    community = "Ansct",
+    bio_replicate = "R1"
+  ) %>%
+  unite("ID", c(species, tech_replicate, carbon_source), remove = FALSE) %>%
+  select(!nutrient_mix)
+
+#filter out old ancestral data
+data_evld_new <- 
+  data_evld %>%
+    filter(community != "Ansc")
+
+#join both data grames
+data_new <-
+  full_join(data_ansc_new, data_evld_new, by = c("ID", "species", "tech_replicate", "time_hrs", "OD600", "carbon_source","species_richness","community", "bio_replicate"))
+
+
+#perform growth rate calcs
+res <- data_new %>% 
+  filter(species != "Cntl") %>%
+  group_by(ID,tech_replicate,carbon_source,species_richness,community, bio_replicate,colony) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~lm(log(OD600) ~ time_hrs, data = .x)),
+    tidied = map(fit,tidy)
+  ) %>%
+  unnest(tidied) 
+
+res %>%
+  filter(term != "(Intercept)" & estimate > 0) %>%
+  ggplot(., aes(x = term, y = estimate, group = species_richness, color = species_richness))+
+  geom_boxplot(alpha = 0.1, width = 0.5)+
+  geom_point(size = 2, position = position_jitterdodge(jitter.width = 0.2))+
+  geom_hline(yintercept = .25, linetype = "dashed", color = "red")+
+  ylab("growth rate") +
+  facet_grid(rows=vars(carbon_source),cols = vars(species_richness)) 
+
+
+
+
+
+
+```
+
+**To Do**
+
+Growth evolved E. coli only on amino acids (as with ancestors), to see if selection is acting on these resources.
+
+Also worth thinking about, how much can the growth rate really change if the dilution rate is fixed? Strain takeovers occur when mutatants temporarily grow faster than the dilution rate of the pump, but settle back to growth at the dilution rate when the takeover is complete, I think. 
+
+
+
+\end{landscape}
