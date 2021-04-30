@@ -198,6 +198,7 @@ In short, the complete data set shows results completely opposite to what Femke 
 This could be due to the fact that the program previously used to calculate growth rate is libable to errors.
 
 ```{r, echo = FALSE,warning=FALSE,message=FALSE}
+#load evolved strains on sugars
 load(here("Data/data_evolved_strains.RData"))
 data_evld <- data_cut
 
@@ -208,8 +209,23 @@ z <- do.call(rbind,y)
 #save to new name
 data_evld <- z
 
+dat#load evolved strains on amino acids
+load(here("Data/data_cut_AA_23April2021.RData"))
+data_AA <- data_cut
+
+#flatten the list
+y <- do.call(c,data_AA)
+#bind the list to one tibble
+z <- do.call(rbind,y)
+#save to new name
+data_AA <- z
+
+#combine both tibbles
+data_evolved <- bind_rows(data_AA,data_evld)
+
+
 #vector for filtering carbon source combinations needed
-carbon_srcs <- c("F+G+S+L", "F", "G", "S", "L")
+carbon_srcs <- c("F+G+S+L", "F", "G", "S", "L", "AA")
 
 #prep data to be joined to evolved data
 data_ansc_new <- data_ansc %>%
@@ -236,13 +252,13 @@ data_ansc_new <- data_ansc %>%
   select(!nutrient_mix)
 
 #filter out old ancestral data
-data_evld_new <- 
-  data_evld %>%
+data_evolved_new <- 
+  data_evolved %>%
     filter(community != "Ansc")
 
 #join both data grames
 data_new <-
-  full_join(data_ansc_new, data_evld_new, by = c("ID", "species", "tech_replicate", "time_hrs", "OD600", "carbon_source","species_richness","community", "bio_replicate"))
+  full_join(data_ansc_new, data_evolved_new, by = c("ID", "species", "tech_replicate", "time_hrs", "OD600", "carbon_source","species_richness","community", "bio_replicate"))
 
 
 #perform growth rate calcs
